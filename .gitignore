@@ -50,3 +50,7 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+RTE
+/FLM/STMicroelectronics/STM32F4xx/Flash/STM32F4xx/Out
+*.uvguix.GeneKong
