@@ -52,5 +52,5 @@ Mkfile.old
 dkms.conf
 
 RTE
-/FLM/STMicroelectronics/STM32F4xx/Flash/STM32F4xx/Out
+/FLM/STMicroelectronics/**/Out
 *.uvguix.GeneKong

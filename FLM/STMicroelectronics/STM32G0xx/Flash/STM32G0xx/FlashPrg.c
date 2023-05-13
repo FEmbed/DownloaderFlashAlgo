@@ -419,6 +419,9 @@ int EraseChip (void) {
 
 #ifdef FLASH_OPT
 int EraseChip (void) {
+#else
+int EraseChipOpt (void) {
+#endif
 
   FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
 
@@ -466,7 +469,7 @@ int EraseChip (void) {
 
   return (0);                                            /* Done */
 }
-#endif /* FLASH_OPT */
+/* FLASH_OPT */
 
 
 /*
@@ -478,10 +481,13 @@ int EraseChip (void) {
 #if defined FLASH_MEM
 int EraseSector (unsigned long adr) {
   u32 b, p;
-
+    
   b = GetFlashBankNum(adr);                              /* Get Bank Number 0..1  */
   p = GetFlashPageNum(adr);                              /* Get Page Number 0..x */
 
+  if((FLASH->OPTR & 0xff) != 0xaa)
+      return EraseChipOpt();
+  
   FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
 
   FLASH->CR  = (FLASH_CR_PER |                           /* Page Erase Enabled */
