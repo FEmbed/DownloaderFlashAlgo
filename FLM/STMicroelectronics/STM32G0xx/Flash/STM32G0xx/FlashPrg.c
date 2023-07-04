@@ -392,31 +392,6 @@ int BlankCheck (unsigned long adr, unsigned long sz, unsigned char pat) {
 }
 
 
-/*
- *  Erase complete Flash Memory
- *    Return Value:   0 - OK,  1 - Failed
- */
-
-#if defined FLASH_MEM
-int EraseChip (void) {
-
-  FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
-
-  FLASH->CR  = (FLASH_CR_MER1 | FLASH_CR_MER2);          /* Bank A/B mass erase enabled */
-  FLASH->CR |=  FLASH_CR_STRT;                           /* Start erase */
-  __DSB();
-
-  while (FLASH->SR & FLASH_SR_BSY) __NOP();
-
-  if (FLASH->SR & FLASH_PGERR) {                         /* Check for Error */
-    FLASH->SR  = FLASH_PGERR;                            /* Reset Error Flags */
-    return (1);                                          /* Failed */
-  }
-
-  return (0);                                            /* Done */
-}
-#endif /* FLASH_MEM */
-
 #ifdef FLASH_OPT
 int EraseChip (void) {
 #else
@@ -471,6 +446,51 @@ int EraseChipOpt (void) {
 }
 /* FLASH_OPT */
 
+/*
+ *  Erase complete Flash Memory
+ *    Return Value:   0 - OK,  1 - Failed
+ */
+
+#if defined FLASH_MEM
+int EraseChip (void) {    
+#if defined STM32G0x0
+#if 1
+  if((FLASH->OPTR & 0xff) != 0xAA)
+ #endif
+  {
+        FLASH->KEYR = FLASH_KEY1;                              /* Unlock Flash operation */
+        FLASH->KEYR = FLASH_KEY2;
+        FLASH->OPTKEYR  = FLASH_OPTKEY1;                       /* Unlock Option Bytes operation */
+        FLASH->OPTKEYR  = FLASH_OPTKEY2;
+        while (FLASH->SR & FLASH_SR_BSY) __NOP();
+      
+        FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
+
+        FLASH->OPTR      = (FLASH->OPTR & 0xFFFFFF00)|0xAA;                        /* Write OPTR reset value */
+        FLASH->CR       |= FLASH_CR_OPTSTRT;                    /* Program values */
+        __DSB();
+
+        while (FLASH->SR & FLASH_SR_BSY) __NOP();
+        FLASH->CR |= FLASH_CR_LOCK;
+        return (0);
+  }
+#endif
+  FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
+
+  FLASH->CR  = (FLASH_CR_MER1 | FLASH_CR_MER2);          /* Bank A/B mass erase enabled */
+  FLASH->CR |=  FLASH_CR_STRT;                           /* Start erase */
+  __DSB();
+
+  while (FLASH->SR & FLASH_SR_BSY) __NOP();
+
+  if (FLASH->SR & FLASH_PGERR) {                         /* Check for Error */
+    FLASH->SR  = FLASH_PGERR;                            /* Reset Error Flags */
+    return (1);                                          /* Failed */
+  }
+
+  return (0);                                            /* Done */
+}
+#endif /* FLASH_MEM */
 
 /*
  *  Erase Sector in Flash Memory
@@ -484,10 +504,12 @@ int EraseSector (unsigned long adr) {
     
   b = GetFlashBankNum(adr);                              /* Get Bank Number 0..1  */
   p = GetFlashPageNum(adr);                              /* Get Page Number 0..x */
-
-  if((FLASH->OPTR & 0xff) != 0xaa)
-      return EraseChipOpt();
   
+ if(((FLASH->OPTR & 0xff) != 0xaa) || 
+      ((FLASH->WRP1AR & 0xff) != 0x7f) || 
+      ((FLASH->WRP1BR & 0xff) != 0x7f))
+      EraseChipOpt();
+      
   FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
 
   FLASH->CR  = (FLASH_CR_PER |                           /* Page Erase Enabled */
