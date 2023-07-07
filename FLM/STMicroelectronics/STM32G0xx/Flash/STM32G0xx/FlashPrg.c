@@ -64,11 +64,16 @@ typedef          unsigned long     u32;
 #define FLASH_BASE        (0x40022000U)
 #define DBGMCU_BASE       (0x40015800U)
 #define FLASHSIZE_BASE    (0x1FFF75E0U)
+#define SCS_BASE          (0xE000E000UL)                            /*!< System Control Space Base Address */
+#define SysTick_BASE      (SCS_BASE +  0x0010UL)                    /*!< SysTick Base Address */
+#define NVIC_BASE         (SCS_BASE +  0x0100UL)                    /*!< NVIC Base Address */
+#define SCB_BASE          (SCS_BASE +  0x0D00UL)                    /*!< System Control Block Base Address */
 
 #define WWDG            ((WWDG_TypeDef   *) WWDG_BASE)
 #define IWDG            ((IWDG_TypeDef   *) IWDG_BASE)
 #define FLASH           ((FLASH_TypeDef  *) FLASH_BASE)
 #define DBGMCU          ((DBGMCU_TypeDef *) DBGMCU_BASE)
+#define SCB             ((SCB_Type       *) SCB_BASE)
 
 /* Debug MCU */
 typedef struct {
@@ -120,6 +125,21 @@ typedef struct {
   vu32 SR;               /* Offset: 0x08 Status Register */
 } WWDG_TypeDef;
 
+/**
+  \brief  Structure type to access the System Control Block (SCB).
+ */
+typedef struct
+{
+   vu32 CPUID;                  /*!< Offset: 0x000 (R/ )  CPUID Base Register */
+   vu32 ICSR;                   /*!< Offset: 0x004 (R/W)  Interrupt Control and State Register */
+   vu32 VTOR;                   /*!< Offset: 0x008 (R/W)  Vector Table Offset Register */
+   vu32 AIRCR;                  /*!< Offset: 0x00C (R/W)  Application Interrupt and Reset Control Register */
+   vu32 SCR;                    /*!< Offset: 0x010 (R/W)  System Control Register */
+   vu32 CCR;                    /*!< Offset: 0x014 (R/W)  Configuration Control Register */
+   vu32 RESERVED1;
+   vu32 SHP[2U];                /*!< Offset: 0x01C (R/W)  System Handlers Priority Registers. [0] is RESERVED */
+   vu32 SHCSR;                  /*!< Offset: 0x024 (R/W)  System Handler Control and State Register */
+} SCB_Type;
 
 /* Flash Keys */
 #define FLASH_KEY1               0x45670123
@@ -156,6 +176,7 @@ typedef struct {
 #define FLASH_SR_OPTVERR        ((u32)(   1U << 15))
 #define FLASH_SR_BSY1           ((u32)(   1U << 16))
 #define FLASH_SR_BSY2           ((u32)(   1U << 17))
+#define FLASH_SR_CFGBSY           ((u32)(   1U << 18))
 
 #define FLASH_SR_BSY            (FLASH_SR_BSY1 | FLASH_SR_BSY2)
 #define FLASH_PGERR             (FLASH_SR_OPERR   | FLASH_SR_PROGERR | FLASH_SR_WRPERR | \
@@ -430,11 +451,11 @@ int EraseChipOpt (void) {
   FLASH->PCROP2BSR = 0x000001FF;                        /* Write PCROP1BSR reset value */
   FLASH->PCROP2BER = 0x00000000;                        /* Write PCROP1BER reset value */
 #endif
-#endif // STM32G0x1
-
+#endif // STM32G0x1  
+  
   FLASH->CR       = FLASH_CR_OPTSTRT;                    /* Program values */
   __DSB();
-
+  
   while (FLASH->SR & FLASH_SR_BSY) __NOP();
 
   if (FLASH->SR & FLASH_PGERR) {                         /* Check for Error */
@@ -442,6 +463,9 @@ int EraseChipOpt (void) {
     return (1);                                          /* Failed */
   }
 
+  while (FLASH->SR & FLASH_SR_CFGBSY) __NOP();
+  // 这里会重启...
+  FLASH->CR       = FLASH_CR_OBL_LAUNCH;
   return (0);                                            /* Done */
 }
 /* FLASH_OPT */
@@ -453,26 +477,13 @@ int EraseChipOpt (void) {
 
 #if defined FLASH_MEM
 int EraseChip (void) {    
-#if defined STM32G0x0
-#if 1
+#if defined STM32G0x0      
   if((FLASH->OPTR & 0xff) != 0xAA)
- #endif
   {
-        FLASH->KEYR = FLASH_KEY1;                              /* Unlock Flash operation */
-        FLASH->KEYR = FLASH_KEY2;
         FLASH->OPTKEYR  = FLASH_OPTKEY1;                       /* Unlock Option Bytes operation */
         FLASH->OPTKEYR  = FLASH_OPTKEY2;
-        while (FLASH->SR & FLASH_SR_BSY) __NOP();
       
-        FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
-
-        FLASH->OPTR      = (FLASH->OPTR & 0xFFFFFF00)|0xAA;                        /* Write OPTR reset value */
-        FLASH->CR       |= FLASH_CR_OPTSTRT;                    /* Program values */
-        __DSB();
-
-        while (FLASH->SR & FLASH_SR_BSY) __NOP();
-        FLASH->CR |= FLASH_CR_LOCK;
-        return (0);
+        return EraseChipOpt(); 
   }
 #endif
   FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
@@ -504,11 +515,6 @@ int EraseSector (unsigned long adr) {
     
   b = GetFlashBankNum(adr);                              /* Get Bank Number 0..1  */
   p = GetFlashPageNum(adr);                              /* Get Page Number 0..x */
-  
- if(((FLASH->OPTR & 0xff) != 0xaa) || 
-      ((FLASH->WRP1AR & 0xff) != 0x7f) || 
-      ((FLASH->WRP1BR & 0xff) != 0x7f))
-      EraseChipOpt();
       
   FLASH->SR  = FLASH_PGERR;                              /* Reset Error Flags */
 
