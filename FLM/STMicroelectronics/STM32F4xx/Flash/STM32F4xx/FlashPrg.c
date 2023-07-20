@@ -274,7 +274,7 @@ int EraseChip (void) {
 #ifdef STM32F4xx_2048
   FLASH->CR |=  FLASH_MER1;                             // Mass Erase Enabled (sectors 12..23)
 #endif
-  
+  FLASH->CR |=  FLASH_PSIZE_Word;
   FLASH->CR |=  FLASH_STRT;                             // Start Erase
 
   while (FLASH->SR & FLASH_BSY) {
